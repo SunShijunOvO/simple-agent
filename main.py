@@ -42,7 +42,7 @@ client = OpenAI(
     base_url="https://api.deepseek.com",
 )
 
-# 要发送给大模型的消息
+# 初始化要发送给大模型的消息
 messages = [
     {
         "role": "system",
@@ -50,59 +50,86 @@ messages = [
     },
     {
         "role": "user",
-        # "content": "请用两句话解释什么是 Linux 进程。",
-        "content": "请调用 add 工具计算 137 加 289。",
+        "content": "请先调用 add 计算 137＋289。收到工具返回结果后，再调用 add，将这个结果加 100。两步都必须使用工具，最后告诉我结果。",
     },
 ]
 
-# 调用 SDK，将信息发送给 DeepSeek，并接收模型的回复
-response = client.chat.completions.create(
-    model="deepseek-flash",
-    tools=tools,
-    messages=messages,
-    stream=False,
-    extra_body={"thinking": {"type": "disabled"}},
-)
+# 限制最多请求 5 轮
+for i in range(5):
+    # [LOG] 每轮请求调用 SDK 之前，先记录这是第几次调用、准备发送的消息数量是多少
+    print(f"[LOG] 第 [{i + 1}] 次调用 SDK；待发送消息 [{len(messages)}] 条。")
+    # 调用 SDK，将信息发送给 DeepSeek，并接收模型的回复
+    # 每轮只保留一次模型请求
+    response = client.chat.completions.create(
+        model="deepseek-flash",
+        tools=tools,
+        messages=messages,
+        stream=False,
+        extra_body={"thinking": {"type": "disabled"}},
+    )
+    # 保存模型回复的消息
+    response_message = response.choices[0].message
 
-# # 从返回对象中取出回答并打印
-# print(response.choices[0].message.content)
-# # 从返回对象中取出完整消息并打印
-# print(response.choices[0].message)
-
-# 返回对象的完整消息
-message = response.choices[0].message
-
-if message.tool_calls:
-    tool_call = message.tool_calls[0]
-    if tool_call.function.name == "add":
-        try:
-            arguments = json.loads(tool_call.function.arguments)
-        except json.JSONDecodeError:
-            raise SystemExit("工具参数不是有效的 JSON")
-        if not isinstance(arguments, dict):
-            raise SystemExit("工具参数必须是对象")
-        if not ("a" in arguments and "b" in arguments):
-            raise SystemExit("缺少参数 a 或 b")
-        if not (type(arguments["a"]) in (int, float) and type(arguments["b"]) in (int, float)):
-            raise SystemExit("参数必须是数字")
-        result = add(arguments["a"], arguments["b"])
-        # print(result)
-        messages.append(message)
-        messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": str(result),
-            }
+    # 检查模型的回复中是否包含 tool_calls
+    if response_message.tool_calls:
+        # [LOG] 如果有 tool_calls，则记录本轮有多少工具调用。
+        print(
+            f"[LOG] 接收到模型的第 [{i + 1}] 轮回复；"
+            + f"本轮要调用 [{len(response_message.tool_calls)}] 个工具。"
         )
-        final_response = client.chat.completions.create(
-            model="deepseek-flash",
-            messages=messages,
-            stream=False,
-            extra_body={"thinking": {"type": "disabled"}},
-        )
-        print(final_response.choices[0].message.content)
+        # 如果有 tool_calls，则将模型回复的消息追加至 messages
+        messages.append(response_message)
+        # 然后依次调用所有工具
+        for tool_call in response_message.tool_calls:
+            # 如果模型所调用的工具是 "add"，则执行解析、校验、执行、追加消息操作
+            if tool_call.function.name == "add":
+                # 解析参数，模型给出的参数列表是 JSON 形式的，需要解析成 Python 的数据格式
+                try:
+                    arguments = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError:
+                    raise SystemExit("工具参数不是有效的 JSON")
+                # 校验参数的合法性
+                # 校验参数列表是否是字典
+                if not isinstance(arguments, dict):
+                    raise SystemExit("工具参数列表必须是字典对象")
+                # 校验参数是否缺失
+                if not ("a" in arguments and "b" in arguments):
+                    raise SystemExit("缺少参数 a 或 b")
+                # 校验参数类型是否都是数字
+                if not (
+                    type(arguments["a"]) in (int, float)
+                    and type(arguments["b"]) in (int, float)
+                ):
+                    raise SystemExit("参数必须是数字")
+                # 执行 add 函数，计算结果
+                result = add(arguments["a"], arguments["b"])
+                # [LOG] 工具执行成功后，显示工具调用 ID、工具名、解析后的参数、执行结果
+                print(
+                    f"[LOG] 工具执行成功。\n"
+                    + f"      工具调用 ID：[{tool_call.id}]；工具名：[{tool_call.function.name}]；\n"
+                    + f"      解析后的参数：[{arguments}]；执行结果：[{result}]。"
+                )
+                # 将工具执行的结果追加至消息列表
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": str(result),
+                    }
+                )
+            else:
+                # 调用了未知的工具，退出程序
+                raise SystemExit("未知工具，避免执行错误的函数")
     else:
-        print("未知工具，避免执行错误的函数")
+        # [LOG] 如果没有 tool_calls，则记录本轮要调用 0 个工具
+        # 没有工具调用的时候，tool_calls 为 None，无法使用 len 取个数
+        print(f"[LOG] 接收到模型的第 [{i + 1}] 轮回复；本轮要调用 [0] 个工具。")
+        # 如果没有 tool_calls，则直接打印模型的回复信息内容，然后结束循环
+        # 即使在最后一轮循环中模型回复了不包含 tool_calls 的消息，程序依然可以正常 break
+        # [LOG] 正常结束的提示和最终的回答
+        print("[LOG] 正常结束，模型的最终回答为：")
+        print(response_message.content)
+        break
 else:
-    print(message.content)
+    # [LOG] 循环自然结束，说明请求轮数已经耗尽，且尚未获得最终答案，此时显示次数耗尽的提示
+    print("[LOG] 模型请求达到最大轮数，尚未获得最终答案")

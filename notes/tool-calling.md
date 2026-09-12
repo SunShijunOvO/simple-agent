@@ -213,8 +213,8 @@ tools：列表
         └── parameters：参数规则
             ├── type: "object"
             ├── properties
-            │   ├── a: {type: "number", description: "第一个加数"}
-            │   └── b: {type: "number", description: "第二个加数"}
+            │   ├── "a": {type: "number", description: "第一个加数"}
+            │   └── "b": {type: "number", description: "第二个加数"}
             └── required: ["a", "b"]
 ```
 

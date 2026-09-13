@@ -1,14 +1,12 @@
 import os
-from openai import OpenAI
+from openai import OpenAI, APIError
 import json
 from pathlib import Path
-
 
 # 一个十分十分十分十分简单的求和函数，用于 Tool Calling
 def add(a, b):
     """求两数之和"""
     return a + b
-
 
 # 读取笔记函数，给定文件名，在 note/ 下读取对应的笔记并返回正文
 def read_note(note_name: str):
@@ -25,7 +23,6 @@ def read_note(note_name: str):
         raise ValueError("笔记扩展名必须是 .md")
     with open(note_path, "r", encoding="utf-8") as note:
         return note.read()
-
 
 # 工具列表：告诉大模型都有什么工具，以及它们的用途、接收参数等
 # 一个工具使用一个字典进行说明
@@ -88,19 +85,24 @@ messages = [
     },
 ]
 
+# 按照轮次与大模型进行交互。
+# 每一轮的流程为：发送消息 -> 接收模型回复 -> 执行工具调用 -> 发回给模型 -> 循环
 # 限制最多请求 5 轮
 for i in range(5):
     # [LOG] 每轮请求调用 SDK 之前，先记录这是第几次调用、准备发送的消息数量是多少
     print(f"[LOG] 第 [{i + 1}] 次调用 SDK；待发送消息 [{len(messages)}] 条。")
     # 调用 SDK，将信息发送给 DeepSeek，并接收模型的回复
     # 每轮只保留一次模型请求
-    response = client.chat.completions.create(
-        model="deepseek-flash",
-        tools=tools,
-        messages=messages,
-        stream=False,
-        extra_body={"thinking": {"type": "disabled"}},
-    )
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-flash",
+            tools=tools,
+            messages=messages,
+            stream=False,
+            extra_body={"thinking": {"type": "disabled"}},
+        )
+    except APIError as exc:
+        raise SystemExit(f"模型请求失败：{exc}")
     # 保存模型回复的消息
     response_message = response.choices[0].message
 
@@ -204,4 +206,5 @@ for i in range(5):
         break
 else:
     # [LOG] 循环自然结束，说明请求轮数已经耗尽，且尚未获得最终答案，此时显示次数耗尽的提示
-    print("[LOG] 模型请求达到最大轮数，尚未获得最终答案")
+    raise SystemExit("[LOG] 模型请求达到最大轮数，尚未获得最终答案")
+

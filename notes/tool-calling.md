@@ -667,3 +667,75 @@ if message.tool_calls:
 else:
     print(message.content)
 ```
+
+
+<a id="response-archive"></a>
+
+## 15. 完整工具调用响应样例归档
+
+归档日期：2026-09-13。来源：原 `tmp/example_大模型返回消息示例.txt`。这是一份之前保存的 SDK 对象文本，归档时没有重新请求模型；原文件没有注明对应的执行命令，因此不据此补造一次新的实验记录。
+
+下面保留完整样例。`ChatCompletion(...)` 是对象的文本表示，不是 JSON，也不是可直接运行的 Python 脚本。
+
+```text
+# 大模型返回消息的样子：
+ChatCompletion(
+    id="eeab60f7-742e-4cd5-bcf1-976d5967ec9c",
+    choices=[
+        Choice(
+            finish_reason="tool_calls",
+            index=0,
+            logprobs=None,
+            message=ChatCompletionMessage(
+                content="",
+                refusal=None,
+                role="assistant",
+                annotations=None,
+                audio=None,
+                function_call=None,
+                tool_calls=[
+                    ChatCompletionMessageFunctionToolCall(
+                        id="call_00_jJhI4vmQRMD7ywkkzo2S3932",
+                        function=Function(arguments='{"a": 137, "b": 289}', name="add"),
+                        type="function",
+                        index=0,
+                    )
+                ],
+            ),
+        )
+    ],
+    created=1789202287,
+    model="deepseek-flash",
+    object="chat.completion",
+    moderation=None,
+    service_tier=None,
+    system_fingerprint="aeb56401ca74e127821c4f9126dcb669",
+    usage=CompletionUsage(
+        completion_tokens=52,
+        prompt_tokens=313,
+        total_tokens=365,
+        completion_tokens_details=None,
+        prompt_tokens_details=PromptTokensDetails(
+            audio_tokens=None, cache_write_tokens=None, cached_tokens=128
+        ),
+        prompt_cache_hit_tokens=128,
+        prompt_cache_miss_tokens=185,
+    ),
+)
+```
+
+读这份样例时，按层次定位：
+
+| 字段或访问位置 | 这份样例的内容 | 用途 |
+| --- | --- | --- |
+| `response.id` | `eeab60f7-742e-4cd5-bcf1-976d5967ec9c` | 完整响应的标识，不是工具调用 ID |
+| `response.choices[0].finish_reason` | `tool_calls` | 本次响应以提出工具调用结束，不等于用户任务已完成 |
+| `response.choices[0].message.content` | 空字符串 | 本次主要返回工具调用；只打印正文会漏掉要执行的动作 |
+| `message.tool_calls[0].id` | `call_00_jJhI4vmQRMD7ywkkzo2S3932` | 回传该工具结果时使用的 `tool_call_id` |
+| `message.tool_calls[0].function.name` | `add` | 选择本地求和函数 |
+| `message.tool_calls[0].function.arguments` | `'{"a": 137, "b": 289}'` | JSON 文本，先解析并校验，再执行工具 |
+| `response.usage` | 输入 313、输出 52、合计 365 tokens | 该次响应中的用量记录，不是文件字符数 |
+
+表中的 `message` 指 `response.choices[0].message`。当前主程序实际使用 `response_message.tool_calls` 判断是否需要执行工具；不会因为看到空 `content` 就认定任务已经完成。
+
+样例还保存了模型名、生成时间字段、缓存用量和服务端附加字段。这些值属于该份响应，不保证下一次相同，也不表明控制程序对它们都进行了处理。普通文本回答的消息样例见 [basics.md 第 6 节](basics.md#6-记录的消息对象及字段说明)。

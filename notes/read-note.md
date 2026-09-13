@@ -1,6 +1,6 @@
 # read_note：文件读取、路径校验与异常处理
 
-整理日期：2026-09-12。依据：当天完成的 [main.py](../main.py)、[文件读取练习](../tmp/test_read_file.py) 和真实运行记录。
+整理日期：2026-09-12。依据：当天完成的 [main.py](../main.py)、[文件读取练习归档](#read-file-exercise) 和真实运行记录。2026-09-13 将原 `tmp/test_read_file.py` 整合到本文第 13 节后清理临时目录。
 
 配套笔记：[Agent Loop：循环、消息历史与多工具调用](agent-loop.md)。JSON 基础见 [Tool Calling](tool-calling.md)。本篇从文件 I/O 入门，复盘如何把本地读取函数接成模型工具。
 
@@ -60,7 +60,9 @@ print(text)
 
 ## 3. `Path`：根据项目位置定位笔记
 
-### 3.1 当前目录结构与路径来源
+### 3.1 练习当时的目录结构与路径来源
+
+下图保留 9/12 的目录层级，说明练习中两次 `.parent` 的来源；其中的 `tmp/` 已于 9/13 归档清理，当前运行入口仍为项目根目录的 `main.py`。
 
 ```text
 simple-agent/
@@ -414,3 +416,44 @@ def read_note(note_name: str):
 ```
 
 完整工具声明、调用分支和 Agent Loop 见 [2026-09-12 完整源码快照](snapshots/2026-09-12-main.py)。快照独立于当前源码保存，仅供阅读；不要将位于笔记子目录的快照当作项目入口运行。
+
+
+<a id="read-file-exercise"></a>
+
+## 13. 临时读取练习归档
+
+归档日期：2026-09-13。来源：原 `tmp/test_read_file.py`。下面完整保留原练习，包括最早的注释示例；它属于历史代码，不是当前项目入口。路径计算假设脚本位于项目根目录下一层，所以用了两次 `.parent`，不能直接在笔记目录或根目录中按原样运行。
+
+```python
+# with open("/home/shijun/Projects/simple-agent/notes/basics.md", "r", encoding="utf-8") as f:
+#     text = f.read()
+# print(text)
+
+from pathlib import Path
+
+def read_note(file_name: str):
+    # file_path = Path(__file__).resolve().parent.parent/"notes"/file_name
+    notes_dir = (Path(__file__).resolve().parent.parent/"notes").resolve()
+    file_path = (notes_dir/file_name).resolve()
+    if not file_path.is_relative_to(notes_dir):
+        raise ValueError("只能读取 notes 目录下的笔记")
+    if not file_path.is_file():
+        raise FileNotFoundError("文件不存在或不是普通文件")
+    if file_path.suffix != ".md":
+        raise ValueError("笔记扩展名必须是 .md")
+    with open(file_path, "r", encoding="utf-8") as file:
+        text = file.read()
+    return text
+
+content = read_note("basics.md")
+print(content)
+```
+
+该练习中值得保留的细节：
+
+- 最早先用绝对路径配合 `with open` 读取正文，随后改成接收文件名的函数。
+- 函数定义本身不会执行读取；最后两句显式调用 `read_note("basics.md")`，接收正文后打印。
+- 练习将 `file.read()` 的结果保存到 `text`，离开 `with` 关闭文件后再返回；主程序则在 `with` 内直接 `return note.read()`。两种写法都会在调用者收到正文前关闭文件。
+- 路径解析、范围检查、普通文件检查和 `.md` 后缀检查已迁入主程序，详细说明见本文第 3–4 节；无需再保留第二份可执行练习脚本。
+
+这里只归档旧文件，没有把归档操作当作新的运行验证。关于 `with` 的退出协议和对象生命周期，见 [9/13 复盘](request-errors.md)。
